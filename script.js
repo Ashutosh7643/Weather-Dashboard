@@ -111,8 +111,8 @@ async function getWeather() {
         try {
             const aqiResponse = await fetch(aqiUrl);
             const aqiData = await aqiResponse.json();
-            const usAqi = calculateUSAQI(aqiData.list[0].components);
-            displayAQI(usAqi);
+            const indAqi = calculateIndianAQI(aqiData.list[0].components);
+            displayAQI(indAqi);
         } catch (aqiErr) {
             console.error("AQI fetch failed:", aqiErr);
             document.getElementById("aqi").innerText = "--";
@@ -300,19 +300,19 @@ function displayAQI(aqi) {
         aqiText = "Good";
         aqiClass = "aqi-good";
     } else if (aqi <= 100) {
-        aqiText = "Moderate";
+        aqiText = "Satisfactory";
         aqiClass = "aqi-fair";
-    } else if (aqi <= 150) {
-        aqiText = "Sensitive Groups";
-        aqiClass = "aqi-mod";
     } else if (aqi <= 200) {
-        aqiText = "Unhealthy";
-        aqiClass = "aqi-poor";
+        aqiText = "Moderate";
+        aqiClass = "aqi-mod";
     } else if (aqi <= 300) {
-        aqiText = "Very Unhealthy";
+        aqiText = "Poor";
+        aqiClass = "aqi-poor";
+    } else if (aqi <= 400) {
+        aqiText = "Very Poor";
         aqiClass = "aqi-verypoor";
     } else {
-        aqiText = "Hazardous";
+        aqiText = "Severe";
         aqiClass = "aqi-verypoor";
     }
 
@@ -328,8 +328,8 @@ function interpolate(c, cLow, cHigh, iLow, iHigh) {
     return Math.max(iLow, Math.min(iHigh, Math.round(res)));
 }
 
-// Calculate US EPA AQI (0 to 500 scale) from pollutant components
-function calculateUSAQI(components) {
+// Calculate CPCB Indian National AQI (0 to 500 scale) from pollutant components
+function calculateIndianAQI(components) {
     if (!components) return 0;
 
     const subAqis = [];
@@ -338,13 +338,12 @@ function calculateUSAQI(components) {
     if (components.pm2_5 !== undefined) {
         const val = components.pm2_5;
         let aqi;
-        if (val <= 9.0) aqi = interpolate(val, 0.0, 9.0, 0, 50);
-        else if (val <= 35.4) aqi = interpolate(val, 9.0, 35.4, 50, 100);
-        else if (val <= 55.4) aqi = interpolate(val, 35.4, 55.4, 100, 150);
-        else if (val <= 125.4) aqi = interpolate(val, 55.4, 125.4, 150, 200);
-        else if (val <= 225.4) aqi = interpolate(val, 125.4, 225.4, 200, 300);
-        else if (val <= 325.4) aqi = interpolate(val, 225.4, 325.4, 300, 400);
-        else aqi = interpolate(val, 325.4, 500.4, 400, 500);
+        if (val <= 30) aqi = interpolate(val, 0, 30, 0, 50);
+        else if (val <= 60) aqi = interpolate(val, 30, 60, 50, 100);
+        else if (val <= 90) aqi = interpolate(val, 60, 90, 100, 200);
+        else if (val <= 120) aqi = interpolate(val, 90, 120, 200, 300);
+        else if (val <= 250) aqi = interpolate(val, 120, 250, 300, 400);
+        else aqi = interpolate(val, 250, 500, 400, 500);
         subAqis.push(aqi);
     }
 
@@ -352,69 +351,77 @@ function calculateUSAQI(components) {
     if (components.pm10 !== undefined) {
         const val = components.pm10;
         let aqi;
-        if (val <= 54) aqi = interpolate(val, 0, 54, 0, 50);
-        else if (val <= 154) aqi = interpolate(val, 54, 154, 50, 100);
-        else if (val <= 254) aqi = interpolate(val, 154, 254, 100, 150);
-        else if (val <= 354) aqi = interpolate(val, 254, 354, 150, 200);
-        else if (val <= 424) aqi = interpolate(val, 354, 424, 200, 300);
-        else if (val <= 504) aqi = interpolate(val, 424, 504, 300, 400);
-        else aqi = interpolate(val, 504, 604, 400, 500);
+        if (val <= 50) aqi = interpolate(val, 0, 50, 0, 50);
+        else if (val <= 100) aqi = interpolate(val, 50, 100, 50, 100);
+        else if (val <= 250) aqi = interpolate(val, 100, 250, 100, 200);
+        else if (val <= 350) aqi = interpolate(val, 250, 350, 200, 300);
+        else if (val <= 430) aqi = interpolate(val, 350, 430, 300, 400);
+        else aqi = interpolate(val, 430, 600, 400, 500);
         subAqis.push(aqi);
     }
 
-    // NO2 AQI (conversion: 1 ppb = 1.88 ug/m3)
+    // NO2 AQI (µg/m³)
     if (components.no2 !== undefined) {
-        const val = components.no2 / 1.88;
+        const val = components.no2;
         let aqi;
-        if (val <= 53) aqi = interpolate(val, 0, 53, 0, 50);
-        else if (val <= 100) aqi = interpolate(val, 53, 100, 50, 100);
-        else if (val <= 360) aqi = interpolate(val, 100, 360, 100, 150);
-        else if (val <= 649) aqi = interpolate(val, 360, 649, 150, 200);
-        else if (val <= 1249) aqi = interpolate(val, 649, 1249, 200, 300);
-        else if (val <= 1649) aqi = interpolate(val, 1249, 1649, 300, 400);
-        else aqi = interpolate(val, 1649, 2049, 400, 500);
+        if (val <= 40) aqi = interpolate(val, 0, 40, 0, 50);
+        else if (val <= 80) aqi = interpolate(val, 40, 80, 50, 100);
+        else if (val <= 180) aqi = interpolate(val, 80, 180, 100, 200);
+        else if (val <= 280) aqi = interpolate(val, 180, 280, 200, 300);
+        else if (val <= 400) aqi = interpolate(val, 280, 400, 300, 400);
+        else aqi = interpolate(val, 400, 600, 400, 500);
         subAqis.push(aqi);
     }
 
-    // SO2 AQI (conversion: 1 ppb = 2.62 ug/m3)
+    // SO2 AQI (µg/m³)
     if (components.so2 !== undefined) {
-        const val = components.so2 / 2.62;
+        const val = components.so2;
         let aqi;
-        if (val <= 35) aqi = interpolate(val, 0, 35, 0, 50);
-        else if (val <= 75) aqi = interpolate(val, 35, 75, 50, 100);
-        else if (val <= 185) aqi = interpolate(val, 75, 185, 100, 150);
-        else if (val <= 304) aqi = interpolate(val, 185, 304, 150, 200);
-        else if (val <= 604) aqi = interpolate(val, 304, 604, 200, 300);
-        else if (val <= 804) aqi = interpolate(val, 604, 804, 300, 400);
-        else aqi = interpolate(val, 805, 1004, 400, 500);
+        if (val <= 40) aqi = interpolate(val, 0, 40, 0, 50);
+        else if (val <= 80) aqi = interpolate(val, 40, 80, 50, 100);
+        else if (val <= 380) aqi = interpolate(val, 80, 380, 100, 200);
+        else if (val <= 800) aqi = interpolate(val, 380, 800, 200, 300);
+        else if (val <= 1600) aqi = interpolate(val, 800, 1600, 300, 400);
+        else aqi = interpolate(val, 1600, 2000, 400, 500);
         subAqis.push(aqi);
     }
 
-    // O3 AQI (conversion: 1 ppm = 1960 ug/m3)
+    // O3 AQI (µg/m³)
     if (components.o3 !== undefined) {
-        const val = components.o3 / 1960;
+        const val = components.o3;
         let aqi;
-        if (val <= 0.054) aqi = interpolate(val, 0, 0.054, 0, 50);
-        else if (val <= 0.070) aqi = interpolate(val, 0.054, 0.070, 50, 100);
-        else if (val <= 0.085) aqi = interpolate(val, 0.070, 0.085, 100, 150);
-        else if (val <= 0.105) aqi = interpolate(val, 0.085, 0.105, 150, 200);
-        else if (val <= 0.200) aqi = interpolate(val, 0.105, 0.200, 200, 300);
-        else if (val <= 0.400) aqi = interpolate(val, 0.200, 0.400, 300, 400);
-        else aqi = interpolate(val, 0.400, 0.600, 400, 500);
+        if (val <= 50) aqi = interpolate(val, 0, 50, 0, 50);
+        else if (val <= 100) aqi = interpolate(val, 50, 100, 50, 100);
+        else if (val <= 168) aqi = interpolate(val, 100, 168, 100, 200);
+        else if (val <= 208) aqi = interpolate(val, 168, 208, 200, 300);
+        else if (val <= 748) aqi = interpolate(val, 208, 748, 300, 400);
+        else aqi = interpolate(val, 748, 1000, 400, 500);
         subAqis.push(aqi);
     }
 
-    // CO AQI (conversion: 1 ppm = 1145 ug/m3)
+    // CO AQI (µg/m³ to mg/m³)
     if (components.co !== undefined) {
-        const val = components.co / 1145;
+        const val = components.co / 1000;
         let aqi;
-        if (val <= 4.4) aqi = interpolate(val, 0, 4.4, 0, 50);
-        else if (val <= 9.4) aqi = interpolate(val, 4.4, 9.4, 50, 100);
-        else if (val <= 12.4) aqi = interpolate(val, 9.4, 12.4, 100, 150);
-        else if (val <= 15.4) aqi = interpolate(val, 12.4, 15.4, 150, 200);
-        else if (val <= 30.4) aqi = interpolate(val, 15.4, 30.4, 200, 300);
-        else if (val <= 40.4) aqi = interpolate(val, 30.4, 40.4, 300, 400);
-        else aqi = interpolate(val, 40.4, 50.4, 400, 500);
+        if (val <= 1.0) aqi = interpolate(val, 0, 1.0, 0, 50);
+        else if (val <= 2.0) aqi = interpolate(val, 1.0, 2.0, 50, 100);
+        else if (val <= 10.0) aqi = interpolate(val, 2.0, 10.0, 100, 200);
+        else if (val <= 17.0) aqi = interpolate(val, 10.0, 17.0, 200, 300);
+        else if (val <= 34.0) aqi = interpolate(val, 17.0, 34.0, 300, 400);
+        else aqi = interpolate(val, 34.0, 50.0, 400, 500);
+        subAqis.push(aqi);
+    }
+
+    // NH3 AQI (µg/m³)
+    if (components.nh3 !== undefined) {
+        const val = components.nh3;
+        let aqi;
+        if (val <= 200) aqi = interpolate(val, 0, 200, 0, 50);
+        else if (val <= 400) aqi = interpolate(val, 200, 400, 50, 100);
+        else if (val <= 800) aqi = interpolate(val, 400, 800, 100, 200);
+        else if (val <= 1200) aqi = interpolate(val, 800, 1200, 200, 300);
+        else if (val <= 1800) aqi = interpolate(val, 1200, 1800, 300, 400);
+        else aqi = interpolate(val, 1800, 2400, 400, 500);
         subAqis.push(aqi);
     }
 
@@ -583,8 +590,8 @@ async function success(position) {
         try {
             const aqiResponse = await fetch(aqiUrl);
             const aqiData = await aqiResponse.json();
-            const usAqi = calculateUSAQI(aqiData.list[0].components);
-            displayAQI(usAqi);
+            const indAqi = calculateIndianAQI(aqiData.list[0].components);
+            displayAQI(indAqi);
         } catch (aqiErr) {
             console.error("AQI fetch failed:", aqiErr);
             document.getElementById("aqi").innerText = "--";
