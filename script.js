@@ -1,13 +1,19 @@
 const API_KEY = "2ab4371fd9ddecbf617c5455216cce6c";
 
 let weatherChart;
-let lastForecastData = null; // Store globally to redraw chart on theme toggle
+let lastWeatherData = null; // Store globally to re-render on unit toggle
+let lastForecastData = null; // Store globally to redraw chart on theme/unit toggle
+let currentTempUnit = localStorage.getItem("tempUnit") || "C";
 
 // Initialize dashboard components and render history on page load
 window.onload = () => {
     displayHistory();
-    // Default search for a capital city or let it be clean
-    // If they want, we can load a default city like "London" to show off the visual dashboard immediately!
+    
+    const unitToggleBtn = document.getElementById("unitToggle");
+    if (unitToggleBtn) {
+        unitToggleBtn.innerText = `°${currentTempUnit}`;
+    }
+
     const searches = JSON.parse(localStorage.getItem("searches")) || [];
     if (searches.length > 0) {
         document.getElementById("cityInput").value = searches[0];
@@ -94,6 +100,7 @@ async function getWeather() {
         }
 
         saveSearch(city);
+        lastWeatherData = currentData; // Cache current weather data
         displayCurrentWeather(currentData);
 
         // Fetch AQI using coords from current weather API
@@ -104,13 +111,15 @@ async function getWeather() {
         try {
             const aqiResponse = await fetch(aqiUrl);
             const aqiData = await aqiResponse.json();
-            const aqi = aqiData.list[0].main.aqi;
-            displayAQI(aqi);
+            const usAqi = calculateUSAQI(aqiData.list[0].components);
+            displayAQI(usAqi);
         } catch (aqiErr) {
             console.error("AQI fetch failed:", aqiErr);
             document.getElementById("aqi").innerText = "--";
             document.getElementById("aqiBadge").innerText = "Unavailable";
             document.getElementById("aqiBadge").className = "aqi-badge";
+            const aqiBar = document.getElementById("aqiBar");
+            if (aqiBar) aqiBar.style.width = "0%";
         }
 
         const forecastResponse = await fetch(forecastUrl);
@@ -133,12 +142,14 @@ function displayCurrentWeather(data) {
     // 1. City Name
     document.getElementById("cityName").innerText = `${data.name}, ${data.sys.country}`;
 
-    // 2. Date & Time
-    const options = { weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: true };
-    document.getElementById("dateTime").innerText = new Date().toLocaleString('en-US', options);
+    // 2. Date & Time (Adjusted for city timezone offset)
+    const localTimeMs = new Date().getTime() + (new Date().getTimezoneOffset() * 60000) + (data.timezone * 1000);
+    const cityLocalTime = new Date(localTimeMs);
+    const options = { weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC' };
+    document.getElementById("dateTime").innerText = cityLocalTime.toLocaleString('en-US', options);
 
     // 3. Hero Temperature
-    document.getElementById("temperature").innerText = `${Math.round(data.main.temp)}°C`;
+    document.getElementById("temperature").innerText = formatTemp(data.main.temp);
 
     // 4. Icon mapping (standard OpenWeatherMap fallback + custom Lucide layout)
     const iconCode = data.weather[0].icon;
@@ -159,7 +170,7 @@ function displayCurrentWeather(data) {
     document.getElementById("description").innerText = data.weather[0].description;
 
     // 6. Feels Like Card
-    document.getElementById("feelsLike").innerText = `${data.main.feels_like} °C`;
+    document.getElementById("feelsLike").innerText = formatTemp(data.main.feels_like);
     const feelsLikeBar = document.getElementById("feelsLikeBar");
     if (feelsLikeBar) {
         // Map feels_like (cap between -10 and 45) to 0-100%
@@ -188,12 +199,12 @@ function displayCurrentWeather(data) {
         humidityBar.style.width = `${data.main.humidity}%`;
     }
 
-    // 9. Sunrise & Sunset Card
-    const formatTimeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
-    document.getElementById("sunrise").innerText = new Date(data.sys.sunrise * 1000)
-        .toLocaleTimeString([], formatTimeOptions);
-    document.getElementById("sunset").innerText = new Date(data.sys.sunset * 1000)
-        .toLocaleTimeString([], formatTimeOptions);
+    // 9. Sunrise & Sunset Card (Adjusted for city timezone offset)
+    const formatTimeOptions = { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC' };
+    const sunriseLocal = new Date((data.sys.sunrise + data.timezone) * 1000);
+    const sunsetLocal = new Date((data.sys.sunset + data.timezone) * 1000);
+    document.getElementById("sunrise").innerText = sunriseLocal.toLocaleTimeString('en-US', formatTimeOptions);
+    document.getElementById("sunset").innerText = sunsetLocal.toLocaleTimeString('en-US', formatTimeOptions);
 
     // 10. Visibility & Pressure Card
     const visibilityKm = (data.visibility / 1000).toFixed(1);
@@ -210,16 +221,41 @@ function displayForecast(data) {
     const forecastContainer = document.getElementById("forecastContainer");
     forecastContainer.innerHTML = "";
 
-    // OpenWeatherMap 5-day forecast contains 3-hour intervals. Filter for 12:00:00 to represent daily forecast.
-    const dailyForecast = data.list.filter(item => item.dt_txt.includes("12:00:00"));
+    // Group forecast items by local day of the city to handle timezone offsets correctly
+    const daysGroup = {};
+    data.list.forEach(item => {
+        const localDate = new Date((item.dt + data.city.timezone) * 1000);
+        const dateKey = `${localDate.getUTCFullYear()}-${localDate.getUTCMonth() + 1}-${localDate.getUTCDate()}`;
+        if (!daysGroup[dateKey]) {
+            daysGroup[dateKey] = [];
+        }
+        daysGroup[dateKey].push({
+            item: item,
+            localHour: localDate.getUTCHours()
+        });
+    });
 
-    dailyForecast.forEach(day => {
-        const date = new Date(day.dt * 1000);
-        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    // Select the best representative item for each day (closest to local 12:00 PM, i.e., localHour = 12)
+    const dailyForecast = [];
+    Object.keys(daysGroup).forEach(dateKey => {
+        const items = daysGroup[dateKey];
+        items.sort((a, b) => Math.abs(a.localHour - 12) - Math.abs(b.localHour - 12));
+        dailyForecast.push(items[0].item);
+    });
+
+    // Slice at most 5 days
+    const finalForecast = dailyForecast.slice(0, 5);
+
+    finalForecast.forEach(day => {
+        const date = new Date((day.dt + data.city.timezone) * 1000);
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        
+        const dayName = days[date.getUTCDay()];
+        const dateStr = `${months[date.getUTCMonth()]} ${date.getUTCDate()}`;
         const iconCode = day.weather[0].icon;
         const iconName = getWeatherIconName(iconCode);
-        const temp = Math.round(day.main.temp);
+        const tempStr = formatTemp(day.main.temp);
         const desc = day.weather[0].description;
 
         forecastContainer.innerHTML += `
@@ -229,7 +265,7 @@ function displayForecast(data) {
                 <div class="forecast-icon-container" style="margin: 5px 0;">
                     <i data-lucide="${iconName}" style="width: 32px; height: 32px; stroke: var(--secondary-accent);"></i>
                 </div>
-                <p class="forecast-temp">${temp}°C</p>
+                <p class="forecast-temp">${tempStr}</p>
                 <p class="forecast-desc">${desc}</p>
             </div>
         `;
@@ -244,45 +280,146 @@ function displayForecast(data) {
 function displayAQI(aqi) {
     const aqiEl = document.getElementById("aqi");
     const badgeEl = document.getElementById("aqiBadge");
+    const aqiBar = document.getElementById("aqiBar");
 
     if (!aqiEl || !badgeEl) return;
 
     aqiEl.innerText = aqi;
     badgeEl.className = "aqi-badge"; // Reset class names
 
+    // Update progress bar (0 to 500 scale)
+    if (aqiBar) {
+        const percentage = Math.min((aqi / 500) * 100, 100);
+        aqiBar.style.width = `${percentage}%`;
+    }
+
     let aqiText = "";
     let aqiClass = "";
 
-    switch (aqi) {
-        case 1:
-            aqiText = "Good";
-            aqiClass = "aqi-good";
-            break;
-        case 2:
-            aqiText = "Fair";
-            aqiClass = "aqi-fair";
-            break;
-        case 3:
-            aqiText = "Moderate";
-            aqiClass = "aqi-mod";
-            break;
-        case 4:
-            aqiText = "Poor";
-            aqiClass = "aqi-poor";
-            break;
-        case 5:
-            aqiText = "Very Poor";
-            aqiClass = "aqi-verypoor";
-            break;
-        default:
-            aqiText = "Unknown";
-            aqiClass = "";
+    if (aqi <= 50) {
+        aqiText = "Good";
+        aqiClass = "aqi-good";
+    } else if (aqi <= 100) {
+        aqiText = "Moderate";
+        aqiClass = "aqi-fair";
+    } else if (aqi <= 150) {
+        aqiText = "Sensitive Groups";
+        aqiClass = "aqi-mod";
+    } else if (aqi <= 200) {
+        aqiText = "Unhealthy";
+        aqiClass = "aqi-poor";
+    } else if (aqi <= 300) {
+        aqiText = "Very Unhealthy";
+        aqiClass = "aqi-verypoor";
+    } else {
+        aqiText = "Hazardous";
+        aqiClass = "aqi-verypoor";
     }
 
     badgeEl.innerText = aqiText;
     if (aqiClass) {
         badgeEl.classList.add(aqiClass);
     }
+}
+
+// Interpolate value linearly between breakpoints and clamp it
+function interpolate(c, cLow, cHigh, iLow, iHigh) {
+    const res = ((iHigh - iLow) / (cHigh - cLow)) * (c - cLow) + iLow;
+    return Math.max(iLow, Math.min(iHigh, Math.round(res)));
+}
+
+// Calculate US EPA AQI (0 to 500 scale) from pollutant components
+function calculateUSAQI(components) {
+    if (!components) return 0;
+
+    const subAqis = [];
+
+    // PM2.5 AQI
+    if (components.pm2_5 !== undefined) {
+        const val = components.pm2_5;
+        let aqi;
+        if (val <= 9.0) aqi = interpolate(val, 0.0, 9.0, 0, 50);
+        else if (val <= 35.4) aqi = interpolate(val, 9.0, 35.4, 50, 100);
+        else if (val <= 55.4) aqi = interpolate(val, 35.4, 55.4, 100, 150);
+        else if (val <= 125.4) aqi = interpolate(val, 55.4, 125.4, 150, 200);
+        else if (val <= 225.4) aqi = interpolate(val, 125.4, 225.4, 200, 300);
+        else if (val <= 325.4) aqi = interpolate(val, 225.4, 325.4, 300, 400);
+        else aqi = interpolate(val, 325.4, 500.4, 400, 500);
+        subAqis.push(aqi);
+    }
+
+    // PM10 AQI
+    if (components.pm10 !== undefined) {
+        const val = components.pm10;
+        let aqi;
+        if (val <= 54) aqi = interpolate(val, 0, 54, 0, 50);
+        else if (val <= 154) aqi = interpolate(val, 54, 154, 50, 100);
+        else if (val <= 254) aqi = interpolate(val, 154, 254, 100, 150);
+        else if (val <= 354) aqi = interpolate(val, 254, 354, 150, 200);
+        else if (val <= 424) aqi = interpolate(val, 354, 424, 200, 300);
+        else if (val <= 504) aqi = interpolate(val, 424, 504, 300, 400);
+        else aqi = interpolate(val, 504, 604, 400, 500);
+        subAqis.push(aqi);
+    }
+
+    // NO2 AQI (conversion: 1 ppb = 1.88 ug/m3)
+    if (components.no2 !== undefined) {
+        const val = components.no2 / 1.88;
+        let aqi;
+        if (val <= 53) aqi = interpolate(val, 0, 53, 0, 50);
+        else if (val <= 100) aqi = interpolate(val, 53, 100, 50, 100);
+        else if (val <= 360) aqi = interpolate(val, 100, 360, 100, 150);
+        else if (val <= 649) aqi = interpolate(val, 360, 649, 150, 200);
+        else if (val <= 1249) aqi = interpolate(val, 649, 1249, 200, 300);
+        else if (val <= 1649) aqi = interpolate(val, 1249, 1649, 300, 400);
+        else aqi = interpolate(val, 1649, 2049, 400, 500);
+        subAqis.push(aqi);
+    }
+
+    // SO2 AQI (conversion: 1 ppb = 2.62 ug/m3)
+    if (components.so2 !== undefined) {
+        const val = components.so2 / 2.62;
+        let aqi;
+        if (val <= 35) aqi = interpolate(val, 0, 35, 0, 50);
+        else if (val <= 75) aqi = interpolate(val, 35, 75, 50, 100);
+        else if (val <= 185) aqi = interpolate(val, 75, 185, 100, 150);
+        else if (val <= 304) aqi = interpolate(val, 185, 304, 150, 200);
+        else if (val <= 604) aqi = interpolate(val, 304, 604, 200, 300);
+        else if (val <= 804) aqi = interpolate(val, 604, 804, 300, 400);
+        else aqi = interpolate(val, 805, 1004, 400, 500);
+        subAqis.push(aqi);
+    }
+
+    // O3 AQI (conversion: 1 ppm = 1960 ug/m3)
+    if (components.o3 !== undefined) {
+        const val = components.o3 / 1960;
+        let aqi;
+        if (val <= 0.054) aqi = interpolate(val, 0, 0.054, 0, 50);
+        else if (val <= 0.070) aqi = interpolate(val, 0.054, 0.070, 50, 100);
+        else if (val <= 0.085) aqi = interpolate(val, 0.070, 0.085, 100, 150);
+        else if (val <= 0.105) aqi = interpolate(val, 0.085, 0.105, 150, 200);
+        else if (val <= 0.200) aqi = interpolate(val, 0.105, 0.200, 200, 300);
+        else if (val <= 0.400) aqi = interpolate(val, 0.200, 0.400, 300, 400);
+        else aqi = interpolate(val, 0.400, 0.600, 400, 500);
+        subAqis.push(aqi);
+    }
+
+    // CO AQI (conversion: 1 ppm = 1145 ug/m3)
+    if (components.co !== undefined) {
+        const val = components.co / 1145;
+        let aqi;
+        if (val <= 4.4) aqi = interpolate(val, 0, 4.4, 0, 50);
+        else if (val <= 9.4) aqi = interpolate(val, 4.4, 9.4, 50, 100);
+        else if (val <= 12.4) aqi = interpolate(val, 9.4, 12.4, 100, 150);
+        else if (val <= 15.4) aqi = interpolate(val, 12.4, 15.4, 150, 200);
+        else if (val <= 30.4) aqi = interpolate(val, 15.4, 30.4, 200, 300);
+        else if (val <= 40.4) aqi = interpolate(val, 30.4, 40.4, 300, 400);
+        else aqi = interpolate(val, 40.4, 50.4, 400, 500);
+        subAqis.push(aqi);
+    }
+
+    if (subAqis.length === 0) return 0;
+    return Math.max(...subAqis);
 }
 
 // Temperature Chart Creator (re-designed with modern gradient fills)
@@ -292,9 +429,19 @@ function createChart(data) {
 
     // Take the next 8 points (approx. 24 hours of 3-hourly intervals)
     data.list.slice(0, 8).forEach(item => {
-        const timeStr = item.dt_txt.split(" ")[1].slice(0, 5);
+        // Adjust for city local timezone
+        const localTime = new Date((item.dt + data.city.timezone) * 1000);
+        const hours = localTime.getUTCHours();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const hour12 = hours % 12 || 12;
+        const timeStr = `${hour12} ${ampm}`;
         labels.push(timeStr);
-        temperatures.push(Math.round(item.main.temp));
+        
+        let tempVal = item.main.temp;
+        if (currentTempUnit === "F") {
+            tempVal = (tempVal * 9) / 5 + 32;
+        }
+        temperatures.push(Math.round(tempVal));
     });
 
     const ctx = document.getElementById("tempChart").getContext("2d");
@@ -354,7 +501,7 @@ function createChart(data) {
                     displayColors: false,
                     callbacks: {
                         label: function(context) {
-                            return `Temp: ${context.parsed.y}°C`;
+                            return `Temp: ${context.parsed.y}°${currentTempUnit}`;
                         }
                     }
                 }
@@ -417,6 +564,7 @@ async function success(position) {
         const currentResponse = await fetch(currentUrl);
         const currentData = await currentResponse.json();
 
+        lastWeatherData = currentData; // Cache current weather data
         displayCurrentWeather(currentData);
 
         // Geolocation search saves as city name returned by the response
@@ -435,13 +583,15 @@ async function success(position) {
         try {
             const aqiResponse = await fetch(aqiUrl);
             const aqiData = await aqiResponse.json();
-            const aqi = aqiData.list[0].main.aqi;
-            displayAQI(aqi);
+            const usAqi = calculateUSAQI(aqiData.list[0].components);
+            displayAQI(usAqi);
         } catch (aqiErr) {
             console.error("AQI fetch failed:", aqiErr);
             document.getElementById("aqi").innerText = "--";
             document.getElementById("aqiBadge").innerText = "Unavailable";
             document.getElementById("aqiBadge").className = "aqi-badge";
+            const aqiBar = document.getElementById("aqiBar");
+            if (aqiBar) aqiBar.style.width = "0%";
         }
 
     } catch (error) {
@@ -526,3 +676,31 @@ setInterval(() => {
         getWeather();
     }
 }, 300000);
+
+// Toggle Temperature Unit (°C <-> °F)
+function toggleUnit() {
+    currentTempUnit = currentTempUnit === "C" ? "F" : "C";
+    localStorage.setItem("tempUnit", currentTempUnit);
+    
+    const unitToggleBtn = document.getElementById("unitToggle");
+    if (unitToggleBtn) {
+        unitToggleBtn.innerText = `°${currentTempUnit}`;
+    }
+
+    // Re-render cached data instantly
+    if (lastWeatherData) {
+        displayCurrentWeather(lastWeatherData);
+    }
+    if (lastForecastData) {
+        displayForecast(lastForecastData);
+        createChart(lastForecastData);
+    }
+}
+
+// Format temperature value based on selected unit
+function formatTemp(celsius) {
+    if (currentTempUnit === "F") {
+        return `${Math.round((celsius * 9) / 5 + 32)}°F`;
+    }
+    return `${Math.round(celsius)}°C`;
+}

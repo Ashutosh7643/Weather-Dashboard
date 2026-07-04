@@ -32,10 +32,15 @@
                     <i data-lucide="cloud-sun" class="brand-icon"></i>
                     <span>SkyFlow</span>
                 </div>
-                <button onclick="toggleTheme()" class="theme-toggle" title="Toggle Theme" aria-label="Toggle Theme">
-                    <i data-lucide="sun" class="sun-icon"></i>
-                    <i data-lucide="moon" class="moon-icon"></i>
-                </button>
+                <div class="header-actions" style="display: flex; gap: 8px; align-items: center;">
+                    <button onclick="toggleUnit()" class="unit-toggle" id="unitToggle" title="Toggle Temperature Unit" aria-label="Toggle Temperature Unit">
+                        °C
+                    </button>
+                    <button onclick="toggleTheme()" class="theme-toggle" title="Toggle Theme" aria-label="Toggle Theme">
+                        <i data-lucide="sun" class="sun-icon"></i>
+                        <i data-lucide="moon" class="moon-icon"></i>
+                    </button>
+                </div>
             </div>
 
             <!-- Search Area -->
@@ -138,6 +143,11 @@
                             <i data-lucide="gauge" class="metric-icon"></i>
                         </div>
                         <div class="card-val" id="aqi">--</div>
+                        <div class="card-indicator">
+                            <div class="indicator-bar">
+                                <div class="indicator-fill" id="aqiBar" style="width: 0%"></div>
+                            </div>
+                        </div>
                         <div class="card-desc">
                             <span class="aqi-badge" id="aqiBadge">No Data</span>
                         </div>
@@ -209,7 +219,7 @@
     </div>
 
     <!-- Script file -->
-    <script src="script.js"></script>
+    <script src="script.js?v=2"></script>
 </body>
 
 </html>
