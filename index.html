@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyFlow | Premium Weather Dashboard</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body class="dark-theme"> <!-- Default to premium dark theme, toggle changes this class -->
+
+    <div class="app-container">
+
+        <!-- Sidebar Panel -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="logo">
+                    <i data-lucide="cloud-sun" class="brand-icon"></i>
+                    <span>SkyFlow</span>
+                </div>
+                <button onclick="toggleTheme()" class="theme-toggle" title="Toggle Theme" aria-label="Toggle Theme">
+                    <i data-lucide="sun" class="sun-icon"></i>
+                    <i data-lucide="moon" class="moon-icon"></i>
+                </button>
+            </div>
+
+            <!-- Search Area -->
+            <div class="search-section">
+                <div class="search-wrapper">
+                    <i data-lucide="search" class="search-icon"></i>
+                    <input type="text" id="cityInput" placeholder="Search city name...">
+                </div>
+                <div class="search-actions">
+                    <button onclick="getWeather()" class="btn-search">
+                        Search
+                    </button>
+                    <button onclick="getLocationWeather()" class="btn-location" title="Current Location">
+                        <i data-lucide="map-pin"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Recent Searches -->
+            <div class="history-section">
+                <h3>Recent Searches</h3>
+                <ul id="historyList" class="history-chips"></ul>
+            </div>
+
+            <!-- Hero Weather Card -->
+            <div class="weather-summary-card" id="weatherSummaryCard">
+                <div class="location-header">
+                    <h2 id="cityName">No City Selected</h2>
+                    <p id="dateTime">--:--</p>
+                </div>
+
+                <div class="weather-hero">
+                    <div class="temp-display">
+                        <span id="temperature">--°C</span>
+                    </div>
+                    <div class="icon-container">
+                        <img id="weatherIcon" src="" alt="Weather Icon" style="display: none;">
+                        <div id="iconFallback" class="icon-fallback">
+                            <i data-lucide="cloud" class="large-weather-icon"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="weather-condition">
+                    <span id="description">Enter a city to load weather data</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Panel -->
+        <main class="main-content">
+
+            <!-- Today's Highlights Section -->
+            <section class="dashboard-section">
+                <h2 class="section-title">Today's Highlights</h2>
+                <div class="highlights-grid">
+
+                    <!-- Card 1: Feels Like -->
+                    <div class="highlight-card">
+                        <div class="card-header">
+                            <span class="card-label">Feels Like</span>
+                            <i data-lucide="thermometer" class="metric-icon"></i>
+                        </div>
+                        <div class="card-val" id="feelsLike">-- °C</div>
+                        <div class="card-indicator">
+                            <div class="indicator-bar">
+                                <div class="indicator-fill" id="feelsLikeBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 2: Wind Status -->
+                    <div class="highlight-card">
+                        <div class="card-header">
+                            <span class="card-label">Wind Status</span>
+                            <i data-lucide="wind" class="metric-icon"></i>
+                        </div>
+                        <div class="card-val" id="wind">-- m/s</div>
+                        <div class="card-desc" id="windDir">Calm breeze</div>
+                    </div>
+
+                    <!-- Card 3: Humidity -->
+                    <div class="highlight-card">
+                        <div class="card-header">
+                            <span class="card-label">Humidity</span>
+                            <i data-lucide="droplet" class="metric-icon"></i>
+                        </div>
+                        <div class="card-val" id="humidity">--%</div>
+                        <div class="card-indicator">
+                            <div class="indicator-bar">
+                                <div class="indicator-fill" id="humidityBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 4: Air Quality Index -->
+                    <div class="highlight-card">
+                        <div class="card-header">
+                            <span class="card-label">Air Quality</span>
+                            <i data-lucide="gauge" class="metric-icon"></i>
+                        </div>
+                        <div class="card-val" id="aqi">--</div>
+                        <div class="card-desc">
+                            <span class="aqi-badge" id="aqiBadge">No Data</span>
+                        </div>
+                    </div>
+
+                    <!-- Card 5: Sunrise & Sunset -->
+                    <div class="highlight-card sun-card">
+                        <div class="card-header">
+                            <span class="card-label">Sunrise & Sunset</span>
+                            <i data-lucide="sun" class="metric-icon"></i>
+                        </div>
+                        <div class="sun-times">
+                            <div class="sun-time-row">
+                                <i data-lucide="sunrise" class="sunrise-icon"></i>
+                                <div>
+                                    <div class="sun-label">Sunrise</div>
+                                    <div class="sun-val" id="sunrise">--:--</div>
+                                </div>
+                            </div>
+                            <div class="sun-time-row">
+                                <i data-lucide="sunset" class="sunset-icon"></i>
+                                <div>
+                                    <div class="sun-label">Sunset</div>
+                                    <div class="sun-val" id="sunset">--:--</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 6: Visibility & Pressure -->
+                    <div class="highlight-card metrics-card">
+                        <div class="card-header">
+                            <span class="card-label">Visibility & Pressure</span>
+                            <i data-lucide="eye" class="metric-icon"></i>
+                        </div>
+                        <div class="metrics-row">
+                            <div class="metric-item">
+                                <span class="metric-lbl">Visibility</span>
+                                <span class="metric-val" id="visibility">-- km</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-lbl">Pressure</span>
+                                <span class="metric-val" id="pressure">-- hPa</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- Chart Section -->
+            <section class="dashboard-section chart-section">
+                <h2 class="section-title">24-Hour Temperature Forecast</h2>
+                <div class="chart-container-wrapper">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Forecast Section -->
+            <section class="dashboard-section">
+                <h2 class="section-title">5-Day Weather Forecast</h2>
+                <div id="forecastContainer" class="forecast-grid">
+                    <!-- Forecast Cards will be dynamically inserted here -->
+                </div>
+            </section>
+
+        </main>
+
+    </div>
+
+    <!-- Script file -->
+    <script src="script.js"></script>
+</body>
+
+</html>
