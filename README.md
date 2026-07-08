@@ -2,6 +2,8 @@
 
 SkyFlow is a modern, responsive, and visually stunning weather dashboard built with native HTML, CSS, and Vanilla JavaScript. It leverages the OpenWeatherMap API to display real-time weather details, air quality indexes, temperature trends, and 5-day forecasts within a sleek glassmorphic user interface.
 
+🔗 **[Live Demo](https://weather-dashboard-bay-nine.vercel.app/)**
+
 ## ✨ Features
 
 - **Glassmorphic UI Design**: Frosted glass panels (`backdrop-filter`) with vibrant, shifting backdrop gradients for an immersive desktop and mobile experience.
@@ -56,8 +58,12 @@ To query weather details, the project uses the OpenWeatherMap API. A pre-configu
 ### Dark Theme (Obsidian Glass)
 *Premium dark backdrop, custom styled Chart.js, and multi-metric highlights grid.*
 
+![Dark Theme](screenshots/dark-theme.png)
+
 ### Light Theme (Sky Glass)
 *Soft light theme variables preserving clear text readability and chart contrast.*
+
+![Light Theme](screenshots/light-theme.png)
 
 ## 📄 License
 
